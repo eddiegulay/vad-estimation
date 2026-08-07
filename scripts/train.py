@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 import torch  # noqa: E402
 from torch.utils.data import DataLoader  # noqa: E402
 from torch.utils.tensorboard import SummaryWriter  # noqa: E402
+from tqdm import tqdm  # noqa: E402
 
 from vad.config import load_config, load_yaml  # noqa: E402
 from vad.data.collate import collate_batch  # noqa: E402
@@ -114,27 +115,38 @@ def main(
     writer = SummaryWriter(log_dir=str(checkpoint_dir / "tb"))
     best_val_f1 = float("-inf")
 
+    epoch_progress = tqdm(range(num_epochs), desc="epochs", unit="epoch")
     step = 0
-    for epoch in range(num_epochs):
+    for epoch in epoch_progress:
         train_dataset.set_epoch(epoch)
         epoch_losses = []
         t0 = time.time()
-        for batch in train_loader:
+        train_progress = tqdm(
+            train_loader, desc=f"epoch {epoch} train", unit="step", total=steps_per_epoch, leave=False
+        )
+        for batch in train_progress:
             loss = trainer.train_step(batch, chunk_samples)
             if loss is not None:
                 assert loss == loss, "NaN loss detected"
                 epoch_losses.append(loss)
                 step += 1
+                train_progress.set_postfix(loss=f"{loss:.4f}", lr=f"{scheduler.get_last_lr()[0]:.2e}")
             if subset is not None and step >= subset:
                 break
+        train_progress.close()
         train_loss = sum(epoch_losses) / max(1, len(epoch_losses))
 
-        val_metrics = trainer.eval_epoch(val_loader, chunk_samples)
+        val_progress = tqdm(val_loader, desc=f"epoch {epoch} val", unit="batch", leave=False)
+        val_metrics = trainer.eval_epoch(val_progress, chunk_samples)
+        val_progress.close()
         val_loss = val_metrics["val_loss"]
         current_lr = scheduler.get_last_lr()[0]
 
         elapsed = time.time() - t0
-        print(
+        epoch_progress.set_postfix(
+            train_loss=f"{train_loss:.4f}", val_f1=f"{val_metrics['val_f1']:.4f}", val_auroc=f"{val_metrics['val_auroc']:.4f}"
+        )
+        tqdm.write(
             f"epoch {epoch}: train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
             f"val_f1={val_metrics['val_f1']:.4f} val_auroc={val_metrics['val_auroc']:.4f} "
             f"lr={current_lr:.2e} ({elapsed:.1f}s, {step} steps)"
@@ -157,11 +169,12 @@ def main(
                 checkpoint_dir / "best.pt", model, optimizer, model_cfg["architecture"], model_cfg,
                 epoch, step, REPO_ROOT, extra=extra,
             )
-            print(f"  new best val_f1={best_val_f1:.4f} -> best.pt")
+            tqdm.write(f"  new best val_f1={best_val_f1:.4f} -> best.pt")
 
         if subset is not None and step >= subset:
             break
 
+    epoch_progress.close()
     writer.close()
     return 0
 
