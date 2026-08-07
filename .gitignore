@@ -8,6 +8,7 @@ data_cache/
 checkpoints/
 scratch/
 *.onnx
+train_run_*.log
 
 .DS_Store
 .claude/

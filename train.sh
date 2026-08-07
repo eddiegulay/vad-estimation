@@ -9,8 +9,9 @@
 #   EPOCHS=10 ./train.sh          # override epoch count for a shorter run
 #
 # Safe to re-run: preprocessing/manifest steps are idempotent (skip work
-# already done); training always starts a fresh model under a timestamped
-# run name, it does not resume a previous run.
+# already done); a training step is skipped if that run's best.pt already
+# exists (e.g. the process died right after CRNN finished but before TCN
+# started) -- set FORCE_RETRAIN=1 to force a from-scratch retrain instead.
 
 set -euo pipefail
 
@@ -43,6 +44,15 @@ on_error() {
 }
 trap 'on_error $LINENO' ERR
 
+train_or_skip() {
+  local run_name="$1" model_config="$2"
+  if [ -f "checkpoints/${run_name}/best.pt" ] && [ -z "${FORCE_RETRAIN:-}" ]; then
+    echo "checkpoints/${run_name}/best.pt already exists -- skipping training (set FORCE_RETRAIN=1 to retrain)."
+    return
+  fi
+  python scripts/train.py --model-config "$model_config" --run-name "$run_name" ${EPOCH_ARGS[@]+"${EPOCH_ARGS[@]}"}
+}
+
 source .venv/bin/activate
 
 EPOCH_ARGS=()
@@ -60,7 +70,7 @@ step "2/8 Build manifests (idempotent)"
 python scripts/build_manifests.py
 
 step "3/8 Train CRNN (crnn_v1) -- full schedule"
-python scripts/train.py --model-config crnn_v1 --run-name crnn_v1_full "${EPOCH_ARGS[@]}"
+train_or_skip crnn_v1_full crnn_v1
 
 step "4/8 Evaluate CRNN on TEN testset"
 python scripts/evaluate.py --manifest test_ten --checkpoint checkpoints/crnn_v1_full/best.pt --model-config crnn_v1
@@ -70,7 +80,7 @@ python scripts/export.py --checkpoint checkpoints/crnn_v1_full/best.pt --model-c
 python scripts/verify_export.py --checkpoint checkpoints/crnn_v1_full/best.pt --onnx checkpoints/crnn_v1_full/model.onnx --model-config crnn_v1
 
 step "6/8 Train TCN (tcn_v1) -- full schedule"
-python scripts/train.py --model-config tcn_v1 --run-name tcn_v1_full "${EPOCH_ARGS[@]}"
+train_or_skip tcn_v1_full tcn_v1
 
 step "7/8 Evaluate TCN on TEN testset"
 python scripts/evaluate.py --manifest test_ten --checkpoint checkpoints/tcn_v1_full/best.pt --model-config tcn_v1
