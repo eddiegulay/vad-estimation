@@ -5,6 +5,7 @@ from vad.eval.metrics import (
     frame_auroc,
     frame_precision_recall_f1,
     real_time_factor,
+    sweep_thresholds,
 )
 
 
@@ -104,3 +105,19 @@ def test_real_time_factor_basic():
 
 def test_real_time_factor_zero_audio_is_nan():
     assert np.isnan(real_time_factor(wall_seconds=1.0, audio_seconds=0.0))
+
+
+def test_sweep_thresholds_finds_the_separating_threshold():
+    probs = np.array([0.9, 0.8, 0.6, 0.4, 0.2, 0.1])
+    labels = np.array([1, 1, 1, 0, 0, 0])
+    result = sweep_thresholds(probs, labels)
+    assert result["best_f1"] == 1.0
+    assert 0.4 <= result["best_threshold"] <= 0.6
+
+
+def test_sweep_thresholds_returns_sweep_grid_results():
+    probs = np.array([0.9, 0.1])
+    labels = np.array([1, 0])
+    result = sweep_thresholds(probs, labels)
+    assert len(result["sweep"]) > 1
+    assert all("threshold" in r and "f1" in r for r in result["sweep"])

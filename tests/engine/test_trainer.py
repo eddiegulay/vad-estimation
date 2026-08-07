@@ -1,6 +1,6 @@
 import torch
 
-from vad.engine.trainer import compute_class_weights, masked_bce_loss
+from vad.engine.trainer import build_lr_scheduler, compute_class_weights, masked_bce_loss
 
 
 def test_compute_class_weights_balanced_for_50_50():
@@ -72,3 +72,30 @@ def test_masked_bce_loss_weighting_penalizes_minority_more():
     unweighted = masked_bce_loss(probs, labels, mask, pos_weight=1.0, neg_weight=1.0)
     pos_upweighted = masked_bce_loss(probs, labels, mask, pos_weight=5.0, neg_weight=1.0)
     assert pos_upweighted > unweighted
+
+
+def test_lr_scheduler_warms_up_linearly_then_decays():
+    model = torch.nn.Linear(2, 1)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    scheduler = build_lr_scheduler(optimizer, warmup_steps=10, total_steps=100, min_lr_ratio=0.01)
+
+    lrs = []
+    for _ in range(101):
+        lrs.append(scheduler.get_last_lr()[0])
+        optimizer.step()
+        scheduler.step()
+
+    assert lrs[0] < lrs[9], "lr should still be ramping up during warmup"
+    assert abs(lrs[10] - 1e-3) < 1e-6, "lr should peak at base_lr right after warmup"
+    assert lrs[-1] < lrs[10], "lr should have decayed by the end of the schedule"
+    assert lrs[-1] >= 1e-3 * 0.01 - 1e-9, "lr should not decay below the configured floor"
+
+
+def test_lr_scheduler_handles_total_steps_smaller_than_warmup():
+    model = torch.nn.Linear(2, 1)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    # should not raise even in a degenerate config (e.g. a tiny smoke run)
+    scheduler = build_lr_scheduler(optimizer, warmup_steps=500, total_steps=10, min_lr_ratio=0.01)
+    for _ in range(10):
+        optimizer.step()
+        scheduler.step()

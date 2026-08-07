@@ -72,3 +72,63 @@ def build_concat_labels(source_durations: list[float], gaps_s: list[float]) -> l
 
 def total_duration(source_durations: list[float], gaps_s: list[float]) -> float:
     return sum(source_durations) + sum(gaps_s)
+
+
+def trim_internal_silence(
+    waveform: np.ndarray,
+    labels: np.ndarray,
+    sample_rate: int,
+    hop_s: float,
+    rel_threshold_db: float = -35.0,
+    min_run_frames: int = 5,
+) -> np.ndarray:
+    """Fix `build_concat_labels`'s blanket whole-utterance-is-speech labeling:
+    flip already-label==1 frames to 0 wherever they sit in a sustained
+    (>= min_run_frames, default ~160ms at a 32ms hop) low-energy run relative
+    to that example's own typical speech level. Never touches label==0 (gap)
+    frames -- this only removes label *noise* inside source utterances
+    (leading/trailing/internal near-silence and breaths), it does not
+    resegment. Operates on the clean (pre-augmentation) waveform, since a
+    mixed-in noise floor would make energy an unreliable silence signal.
+    """
+    labels = labels.copy()
+    n_frames = len(labels)
+    if n_frames == 0:
+        return labels
+
+    speech_mask = labels == 1
+    if not speech_mask.any():
+        return labels
+
+    frame_samples = max(1, int(round(hop_s * sample_rate)))
+    frame_rms = np.zeros(n_frames, dtype=np.float64)
+    for i in range(n_frames):
+        start = i * frame_samples
+        seg = waveform[start : start + frame_samples]
+        if len(seg):
+            frame_rms[i] = np.sqrt(np.mean(seg.astype(np.float64) ** 2))
+
+    speech_rms = frame_rms[speech_mask]
+    speech_rms = speech_rms[speech_rms > 0]
+    if len(speech_rms) == 0:
+        return labels
+
+    reference = np.median(speech_rms)
+    if reference <= 0:
+        return labels
+    threshold = reference * (10.0 ** (rel_threshold_db / 20.0))
+    is_low = (frame_rms < threshold) & speech_mask
+
+    i = 0
+    while i < n_frames:
+        if is_low[i]:
+            j = i
+            while j < n_frames and is_low[j]:
+                j += 1
+            if j - i >= min_run_frames:
+                labels[i:j] = 0
+            i = j
+        else:
+            i += 1
+
+    return labels

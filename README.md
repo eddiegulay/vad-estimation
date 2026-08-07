@@ -17,6 +17,22 @@ pip install -e ".[dev]"
 python scripts/check_data_paths.py
 ```
 
+## Running the full pipeline unattended
+
+`./train.sh` runs the whole pipeline end to end (data verification, manifest
+build, full training + evaluation + ONNX export for both `crnn_v1` and
+`tcn_v1`) and self-caffeinates so it survives lid-close/display-sleep — safe
+to kick off and walk away from:
+
+```bash
+./train.sh                 # full runs, per configs/train/default.yaml
+EPOCHS=10 ./train.sh        # override epoch count for a shorter run
+```
+
+Logs to `train_run_<timestamp>.log` in the repo root. Preprocessing/manifest
+steps are idempotent (safe to re-run); each training step always starts a
+fresh model under its `_full` run name.
+
 ## Project layout
 
 - `configs/` — YAML configs for data, model, train, eval

@@ -13,6 +13,23 @@ metrics:
 
 boundary_tolerance_ms: 200
 
+# External (non-learned) hangover/hysteresis, applied downstream of the raw
+# per-frame probabilities -- never baked into the model/ONNX graph. Defaults
+# follow Silero's own operating point; see src/vad/postprocess/hysteresis.py.
+postprocess:
+  theta_on: 0.5
+  theta_off: 0.35
+  min_speech_ms: 250
+  min_silence_ms: 200
+
+# Val-set threshold sweep to calibrate theta_on per checkpoint instead of
+# trusting a flat 0.5 -- see vad.eval.metrics.sweep_thresholds.
+calibration:
+  enabled: true
+  grid_min: 0.1
+  grid_max: 0.9
+  grid_step: 0.05
+
 qualitative_plots:
   enabled: true
   num_examples: 10

@@ -1,0 +1,26 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run test suite
+        # Real-data-backed gate tests (overfit/train-loop/dataloader-memory
+        # smoke) are individually skipif-gated on data_cache/manifests
+        # existing (see plan/ROADMAP) -- the external research-vault data
+        # kit is never present in CI, so those skip automatically and this
+        # runs the fast, data-independent unit tests only.
+        run: pytest -v

@@ -86,3 +86,25 @@ def event_boundary_metrics(
 
 def real_time_factor(wall_seconds: float, audio_seconds: float) -> float:
     return wall_seconds / audio_seconds if audio_seconds > 0 else float("nan")
+
+
+def sweep_thresholds(probs: np.ndarray, labels: np.ndarray, grid: np.ndarray | None = None) -> dict:
+    """F1-maximizing operating threshold on frame-level probabilities
+    (calibration against a flat 0.5 cutoff) -- intended for use on a val
+    split, not the final test set.
+    """
+    if grid is None:
+        grid = np.arange(0.1, 0.91, 0.05)
+
+    best_threshold, best_f1 = 0.5, -1.0
+    results = []
+    for threshold in grid:
+        preds = (probs > threshold).astype(int)
+        metrics = frame_precision_recall_f1(preds, labels)
+        f1 = metrics["f1"]
+        results.append({"threshold": float(threshold), "f1": f1})
+        if f1 == f1 and f1 > best_f1:  # f1 == f1 excludes NaN
+            best_f1 = f1
+            best_threshold = float(threshold)
+
+    return {"best_threshold": best_threshold, "best_f1": best_f1, "sweep": results}

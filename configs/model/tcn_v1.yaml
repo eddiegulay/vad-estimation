@@ -1,0 +1,30 @@
+# TCN (MarbleNet-shape): the *same* fixed Conv1d-DFT frontend and per-chunk
+# local conv encoder as crnn_v1 -- isolates the architecture comparison to
+# "how the model remembers across chunks": a causal, dilated,
+# depthwise-separable Conv1d stack here vs. a single GRU in crnn_v1.
+# Target: 100-400K params (note 08's "going bigger does not help" band),
+# streaming via explicit (chunk, state) -> (prob, state').
+
+name: tcn_v1
+architecture: tcn
+
+frontend:
+  chunk_samples: 512      # 32ms @ 16kHz, same framing as crnn_v1
+  n_fft: 256
+  hop_samples: 128
+
+local_conv_blocks:
+  - {in_ch: 129, out_ch: 128, kernel: 3, stride: 1}
+  - {in_ch: 128, out_ch: 64, kernel: 3, stride: 2}
+  - {in_ch: 64, out_ch: 64, kernel: 3, stride: 2}
+  - {in_ch: 64, out_ch: 128, kernel: 3, stride: 1}
+
+temporal:
+  channels: 128
+  kernel_size: 3
+  dilations: [1, 2, 4, 8]   # causal depthwise-separable; receptive field ~31 chunks (~1s)
+
+head:
+  type: pointwise_conv_sigmoid
+
+target_param_count: [100000, 400000]

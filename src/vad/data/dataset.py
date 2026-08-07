@@ -26,6 +26,7 @@ from vad.augment.noise_mix import mix_at_snr
 from vad.augment.reverb import convolve_rir
 from vad.data.manifest import read_jsonl, resolve_augmentation
 from vad.labels.intervals import to_frames
+from vad.labels.synthetic import trim_internal_silence
 
 
 class VADDataset(Dataset):
@@ -122,10 +123,19 @@ class VADDataset(Dataset):
         rng = np.random.default_rng(seed) if seed is not None else self._rng_for_index(index)
 
         waveform = self._assemble_waveform(record, rng)
-        waveform = self._apply_augmentation(waveform, record, rng)
 
+        # Labels are derived from the clean, pre-augmentation waveform --
+        # augmentation (noise mix, reverb, gain) preserves length but would
+        # make energy-based silence detection unreliable (mixed-in noise
+        # floor). Augmentation functions in this pipeline never change
+        # sample count, so `labels` stays aligned with the post-augmentation
+        # waveform below.
         num_frames = int(round(len(waveform) / self.sample_rate / self.hop_s))
         labels = to_frames(record["label_intervals"], num_frames, self.hop_s)
+        if record["kind"] == "concat_synthetic":
+            labels = trim_internal_silence(waveform, labels, self.sample_rate, self.hop_s)
+
+        waveform = self._apply_augmentation(waveform, record, rng)
 
         return {
             "id": record["id"],

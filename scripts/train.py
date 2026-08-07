@@ -17,13 +17,14 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import torch  # noqa: E402
 from torch.utils.data import DataLoader  # noqa: E402
+from torch.utils.tensorboard import SummaryWriter  # noqa: E402
 
 from vad.config import load_config, load_yaml  # noqa: E402
 from vad.data.collate import collate_batch  # noqa: E402
 from vad.data.dataset import VADDataset  # noqa: E402
 from vad.data.manifest import load_index, read_jsonl  # noqa: E402
 from vad.engine.checkpoint import save_checkpoint  # noqa: E402
-from vad.engine.trainer import Trainer, compute_class_weights  # noqa: E402
+from vad.engine.trainer import Trainer, build_lr_scheduler, compute_class_weights  # noqa: E402
 from vad.models import build_model  # noqa: E402
 
 
@@ -51,11 +52,13 @@ def build_loader(
     return dataset, loader
 
 
-def main(epochs: int | None = None, run_name: str = "crnn_v1", subset: int | None = None) -> int:
+def main(
+    epochs: int | None = None, run_name: str = "crnn_v1", subset: int | None = None, model_config: str = "crnn_v1"
+) -> int:
     data_cfg = load_config(
         REPO_ROOT / "configs" / "data" / "paths.yaml", REPO_ROOT / "configs" / "data" / "default.yaml"
     )
-    model_cfg = load_yaml(REPO_ROOT / "configs" / "model" / "crnn_v1.yaml")
+    model_cfg = load_yaml(REPO_ROOT / "configs" / "model" / f"{model_config}.yaml")
     train_cfg = load_yaml(REPO_ROOT / "configs" / "train" / "default.yaml")
 
     cache_root = REPO_ROOT / data_cfg["cache_root"]
@@ -91,10 +94,25 @@ def main(epochs: int | None = None, run_name: str = "crnn_v1", subset: int | Non
     max_chunks = None
     if train_cfg.get("max_train_duration_s"):
         max_chunks = max(1, int(train_cfg["max_train_duration_s"] / hop_s))
-    trainer = Trainer(model, device, optimizer, pos_weight, neg_weight, max_chunks=max_chunks)
+
+    num_epochs = epochs if epochs is not None else train_cfg["schedule"]["epochs"]
+    steps_per_epoch = len(train_loader) if subset is None else min(len(train_loader), subset)
+    total_steps = num_epochs * steps_per_epoch
+    scheduler = build_lr_scheduler(
+        optimizer,
+        warmup_steps=train_cfg["schedule"]["warmup_steps"],
+        total_steps=total_steps,
+        min_lr_ratio=train_cfg["schedule"].get("min_lr_ratio", 0.01),
+    )
+
+    trainer = Trainer(
+        model, device, optimizer, pos_weight, neg_weight,
+        max_chunks=max_chunks, grad_clip_norm=train_cfg.get("grad_clip_norm"), lr_scheduler=scheduler,
+    )
 
     checkpoint_dir = REPO_ROOT / train_cfg["checkpoint"]["dir"] / run_name
-    num_epochs = epochs if epochs is not None else train_cfg["schedule"]["epochs"]
+    writer = SummaryWriter(log_dir=str(checkpoint_dir / "tb"))
+    best_val_f1 = float("-inf")
 
     step = 0
     for epoch in range(num_epochs):
@@ -111,27 +129,40 @@ def main(epochs: int | None = None, run_name: str = "crnn_v1", subset: int | Non
                 break
         train_loss = sum(epoch_losses) / max(1, len(epoch_losses))
 
-        val_losses = []
-        for batch in val_loader:
-            loss = trainer.eval_step(batch, chunk_samples)
-            if loss is not None:
-                val_losses.append(loss)
-        val_loss = sum(val_losses) / max(1, len(val_losses)) if val_losses else float("nan")
+        val_metrics = trainer.eval_epoch(val_loader, chunk_samples)
+        val_loss = val_metrics["val_loss"]
+        current_lr = scheduler.get_last_lr()[0]
 
         elapsed = time.time() - t0
         print(
             f"epoch {epoch}: train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
-            f"({elapsed:.1f}s, {step} steps)"
+            f"val_f1={val_metrics['val_f1']:.4f} val_auroc={val_metrics['val_auroc']:.4f} "
+            f"lr={current_lr:.2e} ({elapsed:.1f}s, {step} steps)"
         )
 
+        writer.add_scalar("loss/train", train_loss, epoch)
+        writer.add_scalar("loss/val", val_loss, epoch)
+        writer.add_scalar("metrics/val_f1", val_metrics["val_f1"], epoch)
+        writer.add_scalar("metrics/val_auroc", val_metrics["val_auroc"], epoch)
+        writer.add_scalar("lr", current_lr, epoch)
+
+        extra = {"train_loss": train_loss, "val_loss": val_loss, **{k: v for k, v in val_metrics.items() if k != "val_loss"}}
         save_checkpoint(
             checkpoint_dir / "last.pt", model, optimizer, model_cfg["architecture"], model_cfg,
-            epoch, step, REPO_ROOT, extra={"train_loss": train_loss, "val_loss": val_loss},
+            epoch, step, REPO_ROOT, extra=extra,
         )
+        if val_metrics["val_f1"] == val_metrics["val_f1"] and val_metrics["val_f1"] > best_val_f1:
+            best_val_f1 = val_metrics["val_f1"]
+            save_checkpoint(
+                checkpoint_dir / "best.pt", model, optimizer, model_cfg["architecture"], model_cfg,
+                epoch, step, REPO_ROOT, extra=extra,
+            )
+            print(f"  new best val_f1={best_val_f1:.4f} -> best.pt")
 
         if subset is not None and step >= subset:
             break
 
+    writer.close()
     return 0
 
 
@@ -142,5 +173,10 @@ if __name__ == "__main__":
         "--subset", type=int, default=None, help="stop after this many optimizer steps (smoke runs)"
     )
     parser.add_argument("--run-name", type=str, default="crnn_v1")
+    parser.add_argument(
+        "--model-config", type=str, default="crnn_v1", help="name under configs/model/ (without .yaml)"
+    )
     args = parser.parse_args()
-    raise SystemExit(main(epochs=args.epochs, run_name=args.run_name, subset=args.subset))
+    raise SystemExit(
+        main(epochs=args.epochs, run_name=args.run_name, subset=args.subset, model_config=args.model_config)
+    )

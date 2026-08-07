@@ -16,16 +16,25 @@ optim:
   lr: 1.0e-3
   weight_decay: 1.0e-4
 
+# Gradient-norm clip applied before every optimizer step (GRU-based models
+# can spike gradients on longer sequences); null disables clipping.
+grad_clip_norm: 5.0
+
 # Random-crop training sequences to at most this many seconds before the
-# forward pass (eval/inference always sees full sequences). Observed MPS
-# throughput is dominated by nn.GRU per-timestep dispatch overhead on long
-# sequences (AMI's 20s windows, LibriSpeech-concat examples up to ~60s) --
-# this is a training-time-only throughput mitigation, see ROADMAP.
-max_train_duration_s: 10.0
+# forward pass (eval always sees full sequences -- Trainer.eval_step does
+# not crop). Observed MPS throughput is dominated by nn.GRU per-timestep
+# dispatch overhead on long sequences (AMI's 20s windows, LibriSpeech-concat
+# examples up to ~60s). Set to 20.0 (not 10.0) so AMI's full window is seen
+# untruncated during training -- only rarer 40-60s LibriSpeech-concat
+# outliers still get cropped. See ROADMAP known issues.
+max_train_duration_s: 20.0
 
 schedule:
   epochs: 50
   warmup_steps: 500
+  # LR decays via cosine schedule from optim.lr down to this floor after
+  # warmup_steps, over the remaining scheduled steps.
+  min_lr_ratio: 0.01
 
 loss:
   type: bce
