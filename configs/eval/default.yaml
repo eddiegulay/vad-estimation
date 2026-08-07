@@ -1,0 +1,19 @@
+# Evaluation defaults.
+
+manifests:
+  - data_cache/manifests/test_ten.jsonl
+  - data_cache/manifests/val.jsonl
+  - data_cache/manifests/sanity_fleurs.jsonl
+
+metrics:
+  - frame_precision_recall_f1
+  - frame_auroc
+  - event_boundary_tolerance
+  - rtf
+
+boundary_tolerance_ms: 200
+
+qualitative_plots:
+  enabled: true
+  num_examples: 10
+  out_dir: scratch/eval_plots

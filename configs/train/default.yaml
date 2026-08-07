@@ -1,0 +1,42 @@
+# Training defaults. See plan §3.5 for the memory-safety reasoning behind
+# num_workers/batch_size/pin_memory choices on 16GB unified-memory Apple Silicon.
+
+device: auto            # torch.backends.mps.is_available() -> mps, else cpu
+precision: fp32          # MPS AMP support is partial as of torch 2.13; model is tiny, speed isn't the bottleneck
+
+dataloader:
+  batch_size: 64
+  num_workers: 4
+  persistent_workers: true
+  prefetch_factor: 2
+  pin_memory: false
+
+optim:
+  name: adamw
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+
+# Random-crop training sequences to at most this many seconds before the
+# forward pass (eval/inference always sees full sequences). Observed MPS
+# throughput is dominated by nn.GRU per-timestep dispatch overhead on long
+# sequences (AMI's 20s windows, LibriSpeech-concat examples up to ~60s) --
+# this is a training-time-only throughput mitigation, see ROADMAP.
+max_train_duration_s: 10.0
+
+schedule:
+  epochs: 50
+  warmup_steps: 500
+
+loss:
+  type: bce
+  class_weighting: from_manifest
+
+checkpoint:
+  dir: checkpoints
+  save_every_epochs: 1
+  keep_best_metric: val_f1
+
+env:
+  pytorch_enable_mps_fallback: true
+
+seed: 20260807

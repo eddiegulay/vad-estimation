@@ -1,0 +1,33 @@
+# Data pipeline defaults shared across architectures.
+# Per-architecture frame hop lives in the model config (labels are hop-agnostic
+# interval lists, materialized to dense arrays at whatever hop the model needs).
+
+sample_rate: 16000
+
+splits:
+  librispeech:
+    train: ["dev-clean", "dev-other"]
+    test: ["test-clean", "test-other"]
+
+synthetic_concat:
+  utterances_per_example: [2, 6]
+  target_duration_s: [8.0, 20.0]
+  gap_s:
+    typical_range: [0.2, 3.0]
+    long_pause_prob: 0.08
+    long_pause_range: [3.0, 8.0]
+
+ami:
+  window_s: 20.0
+  train_overlap: 0.5
+  channel_merge_tolerance_s: 0.02
+  spontaneous_meetings_held_out_for_val: ["EN2001a"]
+  speech_occupancy_sanity_band: [0.20, 0.80]
+
+augmentation:
+  snr_db_range: [-5, 20]
+  rir_prob: 0.5
+  esc50_train_folds: [1, 2, 3, 4]
+  esc50_holdout_fold: [5]
+
+manifest_seed: 20260807

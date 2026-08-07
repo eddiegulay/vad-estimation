@@ -1,0 +1,18 @@
+# Absolute path to the external research vault's data directory.
+# Never duplicated into this repo in bulk — referenced in place.
+vault_data_root: "/Users/eddiegulay/Documents/Obsidiam Vault/The vault/Voice Activity Research/data"
+
+# Sub-paths relative to vault_data_root, verified present on disk 2026-08-07.
+corpora:
+  librispeech: "LibriSpeech"
+  esc50_audio: "ESC-50-master/audio"
+  esc50_meta: "ESC-50-master/meta/esc50.csv"
+  air_rir: "air_database/AIR_1_4"
+  ami_audio: "ami/audio"
+  ami_segments: "ami/annotations/segments"
+  ten_testset: "ten-vad-testset"
+  fleurs_sw_ke: "fleurs_sw_ke"
+
+# Generated artifacts, local to this repo, gitignored.
+cache_root: "data_cache"
+manifests_dir: "data_cache/manifests"

@@ -1,0 +1,33 @@
+[project]
+name = "vad-models"
+version = "0.1.0"
+description = "Lightweight, real-time voice activity detection models — multi-architecture training pipeline."
+requires-python = ">=3.14"
+dependencies = [
+    "torch==2.13.0",
+    "onnx",
+    "onnxscript",
+    "onnxruntime==1.28.0",
+    "soundfile",
+    "scipy",
+    "numpy",
+    "pyyaml",
+    "matplotlib",
+    "tqdm",
+    "tensorboard",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"

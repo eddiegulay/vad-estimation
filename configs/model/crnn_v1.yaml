@@ -1,0 +1,28 @@
+# CRNN (Silero-shape): fixed Conv1d-DFT frontend (raw STFT magnitude, not
+# mel-filtered) + a small dense conv stack + 1 GRU, matching Silero's traced
+# architecture (plain convs, not depthwise-separable -- that's the TCN/
+# MarbleNet-style architecture's lever, not this one's).
+# Target: 150-310K params, streaming via explicit (chunk, state) -> (prob, state').
+
+name: crnn_v1
+architecture: crnn
+
+frontend:
+  chunk_samples: 512      # 32ms @ 16kHz, matches Silero's fixed chunk size
+  n_fft: 256               # -> 129 magnitude bins (n_fft//2 + 1), matches conv_blocks[0].in_ch
+  hop_samples: 128
+
+conv_blocks:
+  - {in_ch: 129, out_ch: 128, kernel: 3, stride: 1}
+  - {in_ch: 128, out_ch: 64, kernel: 3, stride: 2}
+  - {in_ch: 64, out_ch: 64, kernel: 3, stride: 2}
+  - {in_ch: 64, out_ch: 128, kernel: 3, stride: 1}
+
+recurrent:
+  type: gru
+  hidden_size: 128
+
+head:
+  type: pointwise_conv_sigmoid
+
+target_param_count: [150000, 310000]
