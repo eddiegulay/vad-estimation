@@ -1,0 +1,22 @@
+{
+  "esc50": {
+    "entries": 2000,
+    "index_sha256": "aad13a51412f15f58037782f75529f8c9cf422a016c19fdecd69022e892c0dd7",
+    "index_bytes": 365694
+  },
+  "librispeech": {
+    "entries": 11126,
+    "index_sha256": "24d01c9cd55a6a9a0332e55ea849efcedb47a1805768cc35487c5acb0368a9f7",
+    "index_bytes": 1571752
+  },
+  "rir": {
+    "entries": 214,
+    "index_sha256": "b5cd67f73b4bdfffd44e28b390421cfec3040524d7ed008ab94c000ccbd1a0d7",
+    "index_bytes": 30958
+  },
+  "ami": {
+    "entries": 33,
+    "index_sha256": "a3a06c3780dee007185b0095f87b9f738d67fe5d2f003de59110f5d6726868db",
+    "index_bytes": 6728
+  }
+}

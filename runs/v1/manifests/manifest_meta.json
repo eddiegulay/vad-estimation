@@ -1,0 +1,47 @@
+{
+  "manifest_set": "v1",
+  "manifest_seed": 20260807,
+  "builder_commit": "d366899",
+  "builder": "scripts/build_manifests.py",
+  "note": "Archived gzipped. v1 wrote manifests to a flat unversioned dir; the next build would have overwritten them.",
+  "splits": {
+    "train": {
+      "n_examples": 9318,
+      "kinds": {
+        "concat_synthetic": 3000,
+        "ami_window": 6318
+      },
+      "total_duration_s": 221302.4,
+      "speech_occupancy": 0.8378,
+      "sha256_gz": "850f10fd37a2fcad1fd05cce44f4b5b195861635f9c33709eedbea7450f33cb7"
+    },
+    "val": {
+      "n_examples": 563,
+      "kinds": {
+        "concat_synthetic": 300,
+        "ami_window": 263
+      },
+      "total_duration_s": 14588.8,
+      "speech_occupancy": 0.8716,
+      "sha256_gz": "23d25a177f4e86c7ae8a1ff81229690fd258dd9e2899b8816746e084e28ce3ac"
+    },
+    "test_ten": {
+      "n_examples": 30,
+      "kinds": {
+        "ten_eval": 30
+      },
+      "total_duration_s": 262.3,
+      "speech_occupancy": 0.7522,
+      "sha256_gz": "11a86b37be971274c72a4fe3903054a15f1e9f11f6735ba9ebb6012f06a39f5b"
+    },
+    "sanity_fleurs": {
+      "n_examples": 200,
+      "kinds": {
+        "concat_synthetic": 200
+      },
+      "total_duration_s": 12573.0,
+      "speech_occupancy": 0.9314,
+      "sha256_gz": "b9585c15d5bca7d8e6b3b97a6855f666ee637efec75c6ff69fb6f42201d37f59"
+    }
+  }
+}

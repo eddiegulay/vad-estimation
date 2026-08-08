@@ -4,11 +4,19 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 
+# Generated / live working dirs -- never committed.
 data_cache/
 checkpoints/
 scratch/
 *.onnx
 train_run_*.log
+
+# runs/ is the COMMITTED archive of promoted runs. It deliberately re-includes
+# artifacts the patterns above would otherwise ignore (*.onnx, *.log.gz, *.pt).
+# Promotion into runs/ is an explicit act -- never automatic. Order matters:
+# this block must follow the ignores above and precede the junk patterns below.
+!runs/
+!runs/**
 
 .DS_Store
 .claude/

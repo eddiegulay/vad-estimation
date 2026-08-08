@@ -1,0 +1,47 @@
+{
+  "run_id": "crnn_v1_full",
+  "alias": "v1-crnn-full",
+  "version": "v1",
+  "architecture": "crnn",
+  "model_config": "configs/model/crnn_v1.yaml",
+  "train_config": "configs/train/default.yaml (as of tag v1.0)",
+  "data_config": "configs/data/default.yaml (as of tag v1.0)",
+  "git_commit": "d366899",
+  "code_identical_at_tag": "v1.0",
+  "manifest_set": "v1",
+  "manifest_seed": 20260807,
+  "epochs": 50,
+  "steps": 7300,
+  "batch_size": 64,
+  "best_checkpoint_epoch": 28,
+  "last_checkpoint_epoch": 49,
+  "params_trainable": 210561,
+  "device": "mps",
+  "precision": "fp32",
+  "wall_clock": "~2h30m",
+  "seeded": false,
+  "seeded_note": "Only the augmentation RNG was seeded. Model init, dataloader shuffle and crop offset were not. These weights are not reproducible.",
+  "source_log": "train_run_20260807_070048.log",
+  "reported_test_ten": {
+    "precision": 0.8518680677174547,
+    "recall": 0.948180636777128,
+    "f1": 0.8974477244772447,
+    "accuracy": 0.8369990224828935,
+    "auroc": 0.9045787453651428,
+    "rtf": 0.006209634688709253
+  },
+  "reported_test_ten_note": "rtf is a measurement artifact (see ERRATA E1). All val-derived numbers are affected by B1.",
+  "known_defects": [
+    "B1 MPS conv row corruption invalidates all val metrics",
+    "B2 batch-level crop discarded ~72% of supervision",
+    "B3 augmentation frozen at epoch 0",
+    "E4 ONNX exported from the mis-selected best.pt"
+  ],
+  "see": "docs/v1/ERRATA.md",
+  "artifact_sha256": {
+    "best.pt": "0726e37678869854f1c316f27c25ac95f8372dff270372ee08cc07a97c80f018",
+    "last.pt": "65a7a3d191d1087795037d6f61b705d7541a73c7f6ad1be76c0ad30de6514cd0",
+    "model.onnx": "2518e4950223dfa3eebf75fa74c66eb190c19a632e9a90544a480dd1cf26f047",
+    "eval_report_test_ten.json": "e0a60faf9ecf618d056cea1f31e918747d13c34e1931291aca1c30c0217b1cf6"
+  }
+}
