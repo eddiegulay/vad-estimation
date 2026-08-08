@@ -1,3 +1,8 @@
+> **ARCHIVED — frozen at tag `v1.0`.** This is the v1 roadmap exactly as it stood when v1
+> completed. **Several of its claims are now known to be wrong** — see [`ERRATA.md`](./ERRATA.md)
+> for each one, and [`RESULTS.md`](./RESULTS.md) for the corrected numbers. Nothing below this
+> banner has been edited. Current work: [`../v2/ROADMAP.md`](../v2/ROADMAP.md).
+
 # VAD Models — Roadmap
 
 Training pipeline for lightweight, real-time VAD models. First architecture: a CRNN in the Silero-VAD shape (Conv1d-DFT frontend + depthwise-separable convs + 1 GRU, ~150-310K params), built through a config-driven, multi-architecture pipeline so a MarbleNet-style TCN and/or an FSMN-style model can be trained later without restructuring. Full design rationale lives in the approved plan at `/Users/eddiegulay/.claude/plans/structured-mapping-dream.md`.
