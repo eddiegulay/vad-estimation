@@ -27,3 +27,32 @@ corrected results, conventions, v2 roadmap and gates. Tagged `v1.0`.
 
 Not yet started: any v2 code. Phase 0 begins with the MPS row-limit fix and the config/manifest
 versioning described in `CONVENTIONS.md`.
+
+---
+
+**2026-08-08 (later) — v2 reframed as a fresh build; plan de-risked before execution.**
+Three agents: greenfield build design, a "no betting" audit of every claim in the plan, and a
+coverage/consistency audit of the committed docs.
+
+The greenfield design produced the carry/rewrite/drop verdict per module, the WP0–WP12 build
+order with seam proofs at every trust boundary, and the load-bearing ordering constraint: the v1
+probability pins do not exist yet and must be generated at the tag before the cutover.
+
+The bet audit ran seven measurements and falsified two of the plan's premises ("dataloader-
+bound" — actually model-bound, co-training 1.8×; "48 held-out speakers" — zero were held out),
+corrected two more (paired-sigma ratios transposed; 8-chunk warm-up mask under-sized against a
+20–30-chunk transient), and confirmed the core resolution arithmetic (paired MDE 0.019 on TEN-30
+alone). It also found that every Phase 2 number, the +0.027 A/B, and the turn-cost figures were
+reproducible from no artifact in the repo — now fixed by DESIGN-NOTES.md, BETS.md, the committed
+measurement scripts, and the WP0.5 spikes.
+
+The coverage audit found ten internal contradictions in the committed docs, the worst being: G2
+arithmetically unsatisfiable under the 8 s crop design it protects; G10 untestable against v1
+(v1 manifests record neither noise nor RIR membership — verified); the ship gates needing v1
+baselines on the new benchmark that nothing scheduled; and the 9-series AMI benchmark leaking
+all six training series. All fixed in the rewritten ROADMAP/GATES, which also add G11–G14 (loss
+gradient, lr>0, export parity, memory budget), CI gate accounting, licensing in the ship
+criteria, and the enumerated five pinned corrections for Phase 0.
+
+Committed: rewritten ROADMAP.md and GATES.md, new DESIGN-NOTES.md / BETS.md / measurements/.
+Next: WP0 (pin v1 at the tag), then the WP0.5 spikes.

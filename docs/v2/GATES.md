@@ -1,31 +1,55 @@
 # v2 Correctness Gates
 
-Every gate here must **exist and fail against tag `v1.0`** before Phase 4 begins. They turn green
-only as the corresponding fixes land. A gate that has never failed has not been shown to work.
+Every gate must **exist and demonstrably fail against tag `v1.0`** before WP10 (first training)
+begins. They turn green only as the fresh build lands. A gate that has never failed has not been
+shown to work.
 
-`scripts/preflight.py` runs all of them; `train.sh` exits non-zero and refuses to launch if any
-fails. Target preflight runtime: ≤ 90 s.
+Mechanics: gates live in `tests/gates/test_g*.py`. Behavioral gates (G1, G2, G3, G5, G8, G9,
+G11, G12) are run once against a `v1.0` worktree via a thin driver; artifact gates (G4, G6, G7,
+G10, G13) run against `runs/v1/` bytes forever as regression fixtures. `scripts/preflight.py`
+runs the ≤90 s subset; `train.sh` exits non-zero on any red. Every measured failing value is
+recorded in `GATE_BASELINE.md` next to its passing value when it turns green — **a gate with no
+baseline row cannot be marked green.**
+
+Two corrections to this file's first draft, found before execution: G1's "bit-identical to CPU"
+demanded the impossible (cross-backend bit-identity does not exist — v1's own safe-size
+measurement was 3e-6, not 0), and G2's frame-coverage arithmetic was unsatisfiable under the 8 s
+crop design it was meant to protect. Both are restated correctly below. G10's first draft was
+untestable against v1 — v1's manifests record neither noise nor RIR membership (verified), so a
+manifest-scan gate passes vacuously; v2 manifests must enumerate membership, and the v1 failure
+is demonstrated via a reconstructed aug-template membership file.
 
 ---
 
 | ID | Gate | Asserts | Fails at (measured v1 value) |
 |---|---|---|---|
-| **G1** | MPS conv parity | On the real conv stack at `[rows, 1, 640]` for rows ∈ {65535, 65536, 65537, 100000, 162368}: `max abs(cpu − mps) < 1e-4`. Plus the chunked path is bit-identical to CPU, and the trainer refuses `batch_size × max_chunks > 65535` | max diff **3.9** at 65537 rows; 34,464 corrupted rows at 100,000 |
-| **G2** | Supervision density | Over one instrumented epoch on the real manifest: `frames_seen / frames_total ≥ 0.95`; `examples_with_zero_gradient == 0`; `supervised_cells / forward_cells ≥ 0.80` | **0.276 / 44.9% / 0.327** |
-| **G3** | Epoch propagation | Real DataLoader, 2 workers, persistent, spawn, two epochs. Per-example augmentation fingerprint differs between epochs for ≥ 90% of ids, and the epoch observed inside the worker equals the outer epoch for 100% of samples | **0% differ**; worker epoch frozen at 0 |
-| **G4** | Hysteresis invariants | `apply_hysteresis` raises on `theta_off > theta_on`; the config loader validates the post-processing block at load time; lowering `theta_on` never removes a predicted speech frame; the threshold sweep and the state machine use the same comparison operator | The shipped 0.15/0.35 config inverts the Schmitt trigger into a fixed 8-on/6-off oscillator |
-| **G5** | Dead parameters | After one backward on a real batch, every named parameter has non-zero gradient — **and for every convolution, every kernel tap index individually receives non-zero gradient**. Plus dead output channels ≤ 2% over a 200-example probe | 20,480 params with identically-zero gradient (9.7% CRNN / 11.4% TCN); 19/128 channels dead (14.8%) |
-| **G6** | Streaming budget | ≥ 2,000 chunks after ≥ 200 warm-up discarded. CPU single-threaded: p50 ≤ 4 ms, p95 ≤ 10 ms, p99 ≤ 16 ms, max ≤ 32 ms. Also measured on MPS and through ONNX. No architecture enters a run without passing on CPU | TCN CPU p50 17.8 / p95 103 / p99 179 ms — misses budget by 5.6× at p99 |
-| **G7** | Metric correctness | A file with zero predicted onsets contributes precision 0 rather than being dropped; label and probability lengths match for 100% of eval items; the turn cost reproduces the audit's v1 values within ±2%; always-speech scores its known floor exactly; the cluster bootstrap achieves 93–97% empirical coverage where a naive iid bootstrap demonstrably does not | Silent upward precision bias; 149 of 563 val items off by one, unmasked, paired with probabilities from zero padding |
-| **G8** | Determinism | Two evaluation runs at the same seed produce byte-identical output except timestamps. Two trainer constructions at the same seed produce identical initial parameters and identical first-epoch batch order | Nothing is seeded: model init, shuffle order and crop offset all unseeded |
-| **G9** | Config liveness | An access-tracking config wrapper records every key read during a dry run; assert no unread keys | ≥ 12 dead keys. Dead-but-agreeing config is worse than absent — editing it silently does nothing |
-| **G10** | Leakage | No audio path, LibriSpeech speaker, AMI meeting **or series**, held-out ESC-50 clip, or RIR file appears in both a training manifest and any calibration or test manifest | One augmentation template built from folds 1–4 was passed to train, val and sanity alike; the fold holdout key was never read |
+| **G1** | MPS conv parity | For rows ∈ {65535, 65536, 65537, 100000, 162368} on the real conv stack at `[rows, 1, 640]`: `max abs(cpu − mps) < 1e-4`. The chunked path is **bit-identical to the unchunked MPS path at safe sizes**, and within 1e-4 of CPU. The trainer refuses `batch_size × max_chunks > 65535`. | max diff **3.9** at 65537 rows; 34,464 corrupted rows at 100,000. v1 val batches reached 162,368 rows. |
+| **G2** | Supervision density | Per instrumented epoch under the fixed-crop design: **100% of examples contribute ≥ 1 supervised frame**; `supervised_cells / forward_cells ≥ 0.95` (warm-up mask, ≤ 3.2%, is excluded from the denominator); **cumulative labelled-frame coverage over any 4 consecutive epochs ≥ 0.95** (crop offsets are per-item RNG draws, so coverage accrues across epochs). | v1: 44.9% of examples contributed zero gradient; 32.7% of forward cells supervised; 27.6% of frames seen per epoch. |
+| **G3** | Epoch propagation | Real DataLoader, 2 workers, persistent, spawn, two epochs: per-example augmentation fingerprints differ between epochs for ≥ 90% of ids; the epoch observed inside the worker equals the outer epoch for 100% of samples. | 0% differ; worker epoch frozen at 0 for the entire 50-epoch run. |
+| **G4** | Hysteresis invariants | `apply_hysteresis` raises on `theta_off > theta_on`; the config loader validates the block at load (v1's shipped 0.15/0.35 must raise); lowering `theta_on` never removes a predicted speech frame; the sweep and the state machine use the same comparison operator. | The shipped config inverts the Schmitt trigger into a fixed 8-on/6-off oscillator carrying no probability information. |
+| **G5** | Dead parameters | After one backward on a real batch: every parameter has non-zero gradient, **per kernel tap**; dead output channels ≤ 2% over a 200-example probe. Runs on random init — architecture correctness is not contingent on weights. | 20,480 params with identically-zero gradient (9.7% CRNN / 11.4% TCN); 19/128 channels dead. |
+| **G6** | Streaming budget | ≥ 2,000 chunks after ≥ 200 warm-up discarded, CPU single-threaded, PyTorch **and** ONNX paths: p50 ≤ 4 ms, p95 ≤ 10 ms, p99 ≤ 16 ms, max ≤ 32 ms. No architecture enters a training run without passing on CPU. | TCN CPU p50 17.8 / p95 103 / p99 179 ms — 5.6× over budget at p99. |
+| **G7** | Metric correctness | Zero-predicted-onset files contribute precision 0 (never dropped) and increment `files_with_no_pred`; label/probability lengths match for 100% of eval items; turn cost reproduces 5099 / 6491 / 2585 within ±2% on the pinned v1 probabilities; `ConstantSource` reproduces the always-speech floor F1 0.8586 exactly; the cluster bootstrap achieves 93–97% empirical coverage on a synthetic autocorrelated fixture where naive iid demonstrably under-covers; **the report schema rejects any bare-float metric and any `rtf` key**. | Silent upward precision bias; 149/563 val items off by one; iid CIs 3.2× too narrow. |
+| **G8** | Determinism | Two eval runs at the same seed: byte-identical output minus timestamps. Two trainer constructions at the same seed: identical initial parameters and identical first-epoch batch order (CPU claim; MPS lacks deterministic kernels). | Nothing seeded: model init, shuffle order, crop offset. |
+| **G9** | Config liveness | Access-tracking wrapper records every key read during a dry run; assert zero unread keys. | 13 dead keys in v1 (`precision`, `loss.type`, `loss.class_weighting`, `checkpoint.save_every_epochs`, `checkpoint.keep_best_metric`, `env.pytorch_enable_mps_fallback`, three `dataloader.*`, `target_duration_s`, `speech_occupancy_sanity_band`, `esc50_holdout_fold`, `gain_range_db`). |
+| **G10** | Leakage | v2 manifests **enumerate noise-clip and RIR membership per record** (or a committed per-split template file). No audio path, LibriSpeech speaker (including the named 48-speaker benchmark reservation), AMI meeting **or series**, held-out ESC-50 clip, or RIR appears in both a train manifest and any calibration/test/benchmark manifest. | Demonstrated against v1 via a reconstructed aug-template membership file: one template from folds 1–4 served train, val, and sanity alike; the fold-5 holdout key was never read. |
+| **G11** | Loss gradient | On the extreme counterexample (label 0, logit +40): the loss gradient w.r.t. the logit is finite and **non-zero** and matches `bce_with_logits` closed form; the NaN guard is `math.isfinite`, not a bare `assert` (which vanishes under `python -O`). | v1's clamp-then-log produced exactly zero gradient past sigmoid saturation; 3.63% of TCN test frames sat there. |
+| **G12** | Schedule | `lr(step 0) > 0`; warmup is `(step+1)/warmup_steps`; the recorded LR trace contains no zero entries. | v1's first optimizer step ran at lr = 0.0 exactly. |
+| **G13** | Export parity | ONNX streaming ≡ PyTorch streaming ≤ 1e-3 over ≥ 5 real files; eval metrics via the ONNX source match the PyTorch source to 4 decimals; frontend cross-parity (rfft vs conv-DFT): ≤ 1e-3 log-magnitude, ≤ 1e-3 probability, ≤ 1e-4 end-to-end AUROC on the 32-example startup set. Runs on random init. | Not a v1 failure (v1's export parity was 4.2e-4 — sound); the gate exists because the v2 frontend split makes parity *more* fragile, and the linear-domain 1.9e-4 becomes ~0.016 after the log. |
+| **G14** | Memory budget | 300 real batches at configured dataloader settings: peak process-tree RSS under the v1 ceiling (~7.6 GB), soft runaway guard on the median. Carried from v1 — the sampler/dataset/crop path it guards is exactly what the fresh build replaces. | Not a v1 failure; a regression tripwire. |
 
 ---
 
-## Two that are not gates but belong in the same commit
+## Phase-0 acceptance: the five pinned corrections, enumerated
 
-- Replace `assert loss == loss` with a real finite check — the assert vanishes under `python -O`,
-  and it is currently the only NaN guard in the training loop.
-- Replace the clamp-then-log loss with `binary_cross_entropy_with_logits`, so the zero-gradient-
-  on-confidently-wrong-frames failure cannot recur.
+The WP0 regression test asserts, from the pinned `.npz` probabilities, on CPU:
+
+1. CRNN `last.pt` val AUROC 0.9489 > `best.pt` 0.9441 (± 1e-4), and the same ordering for TCN
+   (0.9415 > 0.9323).
+2. Val F1 @ 0.5 = 0.9211 (CRNN) / 0.9226 (TCN) ± 1e-4 — not the corrupted 0.7325 / 0.7944.
+3. Val loss at epoch 49 < val loss at the "best" epoch, both architectures — no overfitting.
+4. TEN F1 0.8974 / AUROC 0.9046 (CRNN) ± 1e-4 — the test-set numbers were never corrupted.
+5. Shipped-vs-raw onset ΔF1 = −0.1209 with a 95% bootstrap CI excluding zero — the
+   post-processing regression reproduces.
+
+Any of the five failing to reproduce is itself a finding, and stops the cutover.
