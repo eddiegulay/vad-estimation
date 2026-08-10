@@ -24,6 +24,12 @@ Ranked by danger-if-wrong × cheapness-to-verify. Items already settled this ses
 | ⏹ | Ship gate 3 margin −0.005 is "non-inferiority" | **FALSE**: below TEN-30's measured resolution; it demanded a +0.014 win. Widened to −0.015. |
 | ⏹ | TEN gap/occupancy targets (202/463/926 ms etc.) | Verified exactly; macro-vs-pooled convention pinned (DESIGN-NOTES §2). |
 | ⏹ | 42% per-step compute at 8 s crops | Confirmed: 0.22/0.54 = 0.41 (DESIGN-NOTES §3). |
+| ⏹ | "ESC-50 is a noise corpus; vocal confusers are the 5 named categories" | **FALSE.** 296/2000 clips carry speech; 44 of the 79 worst lie outside the named categories (DATA-QC §F4). Category curation replaced by a measured filter. |
+| ⏹ | `mix_at_snr` delivers the requested SNR | **FALSE for 18.7% of clips** — zero padding inflates audible noise by 3–13.5 dB (DATA-QC §F5). |
+| ⏹ | The v2 augmentation policy improves distribution match | **FALSE on the level axis.** v1 matches TEN (KS p=0.68), v2-as-written does not (p=0.005), in the direction of easier-than-reality (DATA-QC §F10). DESIGN-NOTES §7 banner-marked; policy re-derived before WP6. |
+| ⏹ | RIR pool = 86 IRs by room name | **Superseded**: measured criterion (RT60 ≤ 1.0 s, tail ≤ 0.5%, delay ≤ 20 ms) gives 131 (DATA-QC §F6). Direct-delay max 90.2 ms confirmed. |
+| ⏹ | Label noise needs the teacher to detect | **FALSE** — energy alone shows 13.3% of LibriSpeech and 22.4% of AMI speech-labelled frames are silent (DATA-QC §F1). Independent cross-check on the teacher's output. |
+| ⏹ | 48-speaker reservation is free | **Priced**: 6.53 h, 33% of LibriSpeech speakers (DATA-QC §F11). |
 
 ## Open — class B (spikes; all in WP0.5, zero training runs)
 

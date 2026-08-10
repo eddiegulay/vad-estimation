@@ -105,6 +105,15 @@ being recovered).
 
 ## 7. Augmentation targets (design-session; concrete values the roadmap references)
 
+> **PARTIALLY FALSIFIED 2026-08-10 — see [`DATA-QC.md`](./DATA-QC.md) §F10.** Measured against
+> TEN, this policy is a *regression* on acoustic match versus v1's (KS p=0.005 vs p=0.68 on
+> speech/non-speech contrast). `noise_prob 0.85` leaves 15% of examples with −100 dBFS digital
+> silence; the SNR mixture's 18 dB centre is 10 dB above v1's and was never measured; the gain
+> range's −6 dB mean shifts training below the test distribution. The RIR room-name list and the
+> named vocal-confuser categories are superseded by measured filters. The values below stand only
+> where DATA-QC.md's amendment table does not override them; the level-axis values must be
+> re-derived by fitting `scripts/qc/qc_contrast.py` before WP6.
+
 - `noise_prob: 0.85` (v1: unconditional — the model never saw clean speech).
 - SNR mixture: 55% normal(18, 6) clipped [10, 35] dB; 32% uniform [3, 10]; 13% uniform [−2, 3].
   Floor raised from −5 dB; vocal-confuser clips get a separate floor of **+6 dB** (at −5 dB a
