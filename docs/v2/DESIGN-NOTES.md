@@ -85,6 +85,21 @@ rides on the AMI diagnostic + ship gate 4, not the composite. The AMI diagnostic
 set). Teacher-labelled sets may adjudicate v2-vs-v2 paired comparisons; superiority claims over
 any teacher-derived system come from human-labelled sets only (TEN-30, AMI, HUMAN-50).
 
+**Amended 2026-08-10 (DATA-QC §F7, §F3).** Two changes, neither disturbing the MDE arithmetic
+above:
+
+- FLEURS-CONV stays 200 clusters in the fixed composite, but they are now **sampled from the
+  3,441 usable files** (3,768 on disk minus 327 near-empty) rather than fixed to the test split.
+  The pool being 17× the sample means the 72%-Swahili caveat is now a *choice* — the composite
+  can be re-balanced or grown at WP4 without acquiring anything. Sampling must respect the
+  split's 10 dB level offset from train (test/dev median RMS −42 dB vs train −33 dB).
+- The AMI diagnostic is **no longer the val+test series only**. With 9 series total, a 3-series
+  holdout measures on 3 clusters and spends the rest on training. v2 evaluates it
+  **leave-one-series-out**, every series a test cluster exactly once, with the rotation stratified
+  across the IS-vs-rest noise-floor divide (IS1000/IS1001 have zero frames below −60 dBFS; ES/TS/
+  EN have 24–46%). This buys resolution the corpus cannot otherwise provide, at compute cost
+  only — and under the no-download premise, compute is the only currency available.
+
 ## 6. Teacher-label protocol (design-session numbers; WP0.5 spike (a) re-pins them)
 
 Protocol: silero-vad (pinned version + weights sha256 folded into `manifest_set_id`), ONNX
@@ -160,3 +175,35 @@ WP0.5 spike (d) sweeps the ratio over [1.0, 2.5] s on cached v1 probabilities: i
 operating point is stable across the range, the knob is immaterial; if not, the ratio becomes a
 reported sensitivity and the fallback is shipping the operating-point frontier rather than a
 point.
+
+## 11. Data inventory and acoustic targets (measured 2026-08-10)
+
+Full audit in [`DATA-QC.md`](./DATA-QC.md); scripts in `scripts/qc/`. **Planning premise: no new
+data is acquired.** Verified on disk 2026-08-10 — the corpora below are what v2 gets.
+
+| corpus | files | hours | role in v2 | notes |
+|---|---|---|---|---|
+| LibriSpeech (dev+test) | 11,126 | 21.25 | concat source, benchmark reservation | 146 speakers; 48-speaker reservation costs 6.53 h (31%) |
+| AMI | 33 | 19.06 | the only conversational data | 9 series in **2 acoustic regimes**; 171 meetings are annotated but only 33 have audio |
+| FLEURS sw_ke | 3,768 | 16.20 | benchmark (re-cut) | all splits on disk; 327 near-empty quarantined; test split sits 10 dB below train |
+| ESC-50 | 2,000 | 2.78 | noise pool | 553 (27.6%) filtered or reclassified |
+| Aachen AIR | 214 | 0.16 | reverb pool | 131 pass the measured criterion |
+| TEN | 30 | 0.07 | frozen anchor | **262 seconds is the entire human-labelled real-world test set** |
+
+**Acoustic targets for the augmentation fit (WP1.5, gate G16).** TEN, from human labels:
+speech/non-speech contrast p10/p50/p90 = **2.1 / 10.0 / 29.0 dB**; median non-speech level
+p10/p50/p90 = **−49.4 / −39.0 / −30.3 dBFS**. Unaugmented training sources are far cleaner —
+dynamic range 43.5 dB (LibriSpeech) and 43.6 dB (AMI) against TEN's 20.5 dB; noise floors −62.5
+and −77.3 dBFS against TEN's −41.4. Augmentation is therefore the *only* mechanism aligning
+train and test acoustics, which is why its parameters are fitted rather than chosen.
+
+**Reference policy comparison** (500 simulated examples each, `qc_contrast.py`): v1 policy
+KS D=0.129 p=0.68 on contrast, D=0.235 p=0.074 on non-speech level. v2 as first specified:
+D=0.318 p=0.005 and D=0.555 p=1.1e-08. The fit target is p > 0.10 on both, and **coverage of the
+test distribution rather than point-matching to 30 files** — TEN's exact levels are a sample, not
+a specification.
+
+**Label-vs-energy cross-check** (independent of the teacher): 13.3% of LibriSpeech and 22.4% of
+AMI speech-labelled frames are silent. After the WP5 hybrid, re-running `qc_label_energy.py`
+should remove most of that mass and little else — a teacher that deletes far more, or far less,
+is a teacher-protocol bug rather than a label improvement.

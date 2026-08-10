@@ -114,3 +114,31 @@ on v1 labels; R1b = + rebuilt labels.
 normative: claims are A (measured), B (spike specified), C (rung named), or D (bet with named
 fallback). A falsified claim left unamended in the docs is a correctness bug. Two of the plan's
 own premises were measured-false before execution began — that is the rule paying for itself.
+
+**2026-08-10 — No new data is acquired for v2.** Confirmed against the filesystem: the corpora
+on disk are the corpora v2 gets. This makes bet D3 (~19 h of conversational speech in 2 acoustic
+regimes) permanent rather than provisional, caps the achievable data quality, and redirects
+every data improvement toward protocol and preparation. Recorded so no later reader mistakes the
+ceiling for an oversight. (Noted for a future version: 171 AMI meetings are annotated on disk but
+only 33 have audio — the cheapest possible expansion if the premise is ever relaxed.)
+
+**2026-08-10 — The augmentation policy is fitted, not chosen.** The v2 policy in DESIGN-NOTES §7
+was measured to be an acoustic *regression* against v1's: v1 is statistically indistinguishable
+from TEN on speech/non-speech contrast (KS p=0.68), the v2 draft is not (p=0.005), missing toward
+easier-than-reality. `noise_prob 0.85` emitted −100 dBFS digital silence, the SNR mixture sat
+10 dB above v1's centre, and the gain range's mean shifted levels below the test set. WP1.5 now
+fits the level-axis parameters against `qc_contrast.py`, and G16 makes the realised match a
+launch condition. This is the first gate in the project whose failing baseline is the plan's own
+draft rather than v1.
+
+**2026-08-10 — Pool membership is decided by measurement, not curation.** The ESC-50
+vocal-confuser category list found 35 of the 79 most speech-contaminated clips; the RIR
+room-name list was a proxy for acoustic properties that are directly measurable. Both are
+replaced by per-file measured criteria, stored in `asset_qc.json` and enforced by G15.
+
+**2026-08-10 — Scarcity is answered with protocol.** Two changes that would not otherwise earn
+their compute: ship gate 4 is adjudicated leave-one-series-out across all 9 AMI series rather
+than on a 3-series holdout, and the FLEURS benchmark samples from all 3,441 usable files rather
+than a fixed 200. Both convert compute into statistical resolution, which is the only exchange
+rate available when acquisition is off the table. LOSO applies to the conclusion, not the search
+— rungs are still screened on the single split.

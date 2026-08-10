@@ -246,10 +246,11 @@ the manifest so the pool can be re-derived rather than re-curated.
   question and are the reason the SNR floor was raised in the first place.
 
 ### P7 — Report and gate
-One `asset_qc.json` + `BENCHMARK.lock`-style hash, referenced from `run.json`. Gates G15
-(quarantine enforcement) and G16 (train-vs-test acoustic match: KS p > 0.10 on contrast and
-non-speech level, measured on the realised training distribution, not the config) join
-[`GATES.md`](./GATES.md).
+One `asset_qc.json` + `BENCHMARK.lock`-style hash, referenced from `run.json`. Gates **G15** (asset
+provenance and quarantine enforcement), **G16** (train-vs-test acoustic match: KS p > 0.10 on
+contrast and non-speech level, measured on the realised training distribution rather than the
+config) and **G17** (no emitted example contains an all-zero frame) are now in
+[`GATES.md`](./GATES.md); the work is [`ROADMAP.md`](./ROADMAP.md) **WP1.5**.
 
 ---
 

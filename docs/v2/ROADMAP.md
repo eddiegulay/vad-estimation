@@ -67,6 +67,41 @@ Measured before execution started; the plan below already incorporates them:
 - The first draft's ship gate 3 margin (−0.005) was tighter than TEN-30's measured resolution
   (±0.013), silently demanding a large win while claiming non-inferiority. Widened to −0.015.
 
+## Corrections from the data audit (2026-08-10)
+
+A waveform-level audit of every asset ([`DATA-QC.md`](./DATA-QC.md)) falsified five more of this
+plan's claims — this time on the data side, and one of them is the augmentation policy itself:
+
+- **The v2 augmentation policy was an acoustic regression.** Simulated against TEN, v1's policy
+  is statistically indistinguishable from the test set (KS p=0.68 on speech/non-speech contrast);
+  the v2 policy as written is not (p=0.005), and misses toward *easier than reality*.
+  `noise_prob 0.85` leaves 15% of examples with −100 dBFS digital silence; the SNR mixture sits
+  10 dB above v1's centre; the gain range's −6 dB mean pushes levels below the test set. The
+  level-axis parameters are now **derived by fitting** (WP1.5), not chosen, and gate **G16**
+  makes the match a launch condition. The timing-axis fixes are unaffected.
+- **ESC-50 is not a noise corpus.** 296 of 2,000 clips carry speech; the hand-picked
+  vocal-confuser category list finds 35 of the 79 worst. Category curation is replaced by a
+  measured filter.
+- **`mix_at_snr` does not deliver the requested SNR** for 18.7% of clips — zero padding inflates
+  audible noise by 3–13.5 dB. Fixed by mixing on the active region.
+- **The RIR room-name restriction is superseded** by a measured criterion (RT60 ≤ 1.0 s, late
+  tail ≤ 0.5%, direct delay ≤ 20 ms) giving 131 IRs rather than 86.
+- **Label noise is visible from energy alone** — 13.3% of LibriSpeech and 22.4% of AMI
+  speech-labelled frames are silent. The teacher's output now has an independent cross-check
+  that does not depend on trusting the teacher.
+
+### Two planning premises, now explicit
+
+**No new data is acquired.** Confirmed 2026-08-10: the corpora on disk are the corpora v2 gets.
+Every improvement below comes from using them better, not from more of them. This caps the data
+quality the version can reach and makes bet D3 (~19 h of conversational speech) permanent rather
+than provisional — recorded here so no later reader mistakes the ceiling for an oversight.
+
+**Therefore scarcity is met with protocol, not volume.** Two consequences that would not
+otherwise be worth their compute: the conversational claim is evaluated **leave-one-series-out**
+across all 9 AMI series rather than on a single 3-series holdout (WP4/WP10), and **all 3,768
+FLEURS files** enter the benchmark pipeline rather than the 200 the first draft allocated.
+
 ---
 
 ## The fresh build: what carries, what is rewritten, what is dropped
@@ -88,7 +123,9 @@ naming the audit finding). **DROP** means: no successor.
 | `data/manifest.py` | **REWRITE** | Embodies four audit findings; schema changes (provenance, tags, noise/RIR membership, versioned dirs, refuse-overwrite). |
 | `data/dataset.py` | **REWRITE** | Built on three defective assumptions (mutable epoch, variable-length output, `round()` frame count). The `(run_seed, epoch, index)` seeding idea survives as spec. |
 | `data/collate.py` | **DROP** | Fixed 8 s crops make training collate `torch.stack`; eval scores one file at a time. The padded-tail bug class retires with it. |
-| `augment/*` (all four) | **CARRY** | Pure functions, fuzz-tested, zero code defects. Every augmentation finding was a *policy* defect, and policy moves to the manifest builder. |
+| `augment/gain.py`, `reverb.py` | **CARRY** | Pure functions, fuzz-tested, zero code defects. Their findings were *policy* defects, and policy moves to the manifest builder. |
+| `augment/noise_mix.py` | **CARRY + fix** | Amended 2026-08-10: not a pure policy defect after all. `mix_at_snr` takes the noise RMS over the whole segment including digital padding, so 18.7% of ESC-50 clips land 3–13.5 dB louder than requested (DATA-QC §F5). Mix on the clip's measured active region; the SNR unit test gains a padded-clip case. |
+| `augment/gaps.py` | **REWRITE** | Amended 2026-08-10: `make_gap_audio` coin-flips between exact zeros and flat −50 dBFS Gaussian noise. Both are unphysical — G17 forbids the first, and white noise is not room tone. Gaps carry a spectrally-shaped floor at a level drawn from the fitted policy. |
 | `models/*` (all four) | **REWRITE** | Encoders structurally defective (9.7%/11.4% dead taps); frontend gains log compression; `forward_full` returns logits. Streaming-state design and the TCN cache rationale carry as spec, docstrings verbatim. |
 | `engine/*` | **REWRITE** | Contains B2, B6, B7, the biased loss averaging, no seeding. Warmup+cosine shape and class-weight math carry as spec. |
 | `eval/*` | **REWRITE** | The heart of v2 (`measure/`). Rank-sum AUROC implementation carried with its tests; everything else replaced. |
@@ -111,19 +148,20 @@ Lightning, no plugin systems); the ONNX I/O contract; the registry pattern; JSON
 
 ## Work packages
 
-Each WP has an exit check; nothing starts until the previous WP's check is green. Training is
-WP10 of 12.
+Each WP has an exit check; nothing starts until the previous WP's check is green. Fifteen
+packages (WP0 through WP12, plus the two half-steps); training is WP10.
 
 | WP | What | Exit check | Phase |
 |---|---|---|---|
 | **WP0** | **Pin v1.** In a worktree at `v1.0`, score both archs × {best, last} × {test_ten, val, sanity_fleurs} on **CPU**; freeze per-file raw probabilities + labels to `.npz` under `runs/v1/`; update `SHA256SUMS`. The pin script asserts it is running at the tag and refuses elsewhere. Includes the FLEURS evaluation that v1 never ran. | `.npz` hashes committed; the five pinned corrections (enumerated in GATES.md Phase-0 acceptance) reproduce from the new bytes. | 0 |
 | **WP0.5** | **De-risk spikes** (no training): (a) install pinned `silero-vad`, reproduce the six teacher-protocol numbers against TEN and AMI, commit script + cached teacher outputs; (b) rebuild the 500-step A/B harness, replicate linear-vs-log on v1 data (validates the harness against the known +0.027), then run it on a rebuilt-data sample (measures transfer — this number becomes R2's pre-registered expectation); (c) A/A seed-replicate run to measure the harness noise floor; (d) c_deadair ratio sweep on cached v1 probabilities. Full specs in [`BETS.md`](./BETS.md). | Each spike's decision rule met or the affected plan item amended before dependent WPs start. | 0/2 |
 | **WP1** | **Cutover.** One commit deletes `src/vad/` + `tests/`, creates the new skeleton (`core/`, `labels/`, `data/`, `measure/`, `models/`, `engine/`, `export/`, `postprocess/`, `tests/gates/`), carries the CARRY modules with their tests, renames configs per CONVENTIONS (`default.yaml` retired; v1 YAMLs frozen read-only). | Carried suites pass unmodified except imports; carried files provably copies from `v1.0`. | 0 |
+| **WP1.5** | **Assets.** The QC sweep is already committed (`scripts/qc/`) and its findings are in [`DATA-QC.md`](./DATA-QC.md); this WP turns them into pipeline state. Emit `asset_qc.json` (status + measured properties per file, hashed into `manifest_set_id`). Apply the measured noise filter (drop 137 speech-bearing + 48 hard-clipped clips; reclassify 296 speech-touched clips as confusers by measurement, retiring the category list) and store each clip's active region. Apply the measured RIR criterion → 131 IRs with direct-path trim. Add the 20 Hz DC/rumble high-pass at cache time; tag hum and effective bandwidth without filtering them. Map AMI's digital-dropout regions for exclusion. **Then fit the augmentation policy**: sweep `noise_prob`, the SNR mixture and the gain range against `qc_contrast.py` until the realised training distribution matches TEN. | G15 green; G16 green (KS p > 0.10 on both contrast and non-speech level, measured on emitted examples); G17 green; every quarantine decision reproducible from a committed script. | 1 |
 | **WP2** | **`measure/`** — metrics (both classes, FAR/MISS, bal-acc, MCC, AP×2, rank-sum AUROC), events (onset **and offset** F1, latency distributions + never-released), FSTTM cost, cluster bootstrap (paired by construction, B=10000, NaN→zero-fill), report schema (no bare floats), slices (groupby over tags), calibration, benchmark acceptance. **Imports numpy/scipy only — a torch import in `measure/` fails CI.** Scores any `ProbabilitySource`, including WP0's `.npz`. | Seam proofs S1–S4: reproduces every corrected v1 number from the pinned bytes to 1e-9 (frame metrics), reproduces the audit's event/cost/bootstrap numbers to their stated tolerances; `ConstantSource` reproduces the always-speech floor exactly. | 1 |
-| **WP3** | **Gates + preflight.** All gates in GATES.md as `tests/gates/test_g*.py`; `scripts/preflight.py` (≤90 s subset); `train.sh` refuses on red. Behavioral gates run against the `v1.0` worktree once; artifact gates run against `runs/v1/` bytes forever. Every measured failing value recorded in `GATE_BASELINE.md` — **a gate with no baseline row cannot be marked green.** | Every gate demonstrably fails against v1 with the predicted value (G10 via the reconstructed v1 aug-template membership file). | 0 |
-| **WP4** | **Benchmark.** TEN-matched LibriSpeech concat over the named 48-speaker reservation; FLEURS test **re-cut** to TEN statistics; AMI diagnostic from the **val+test series only** (3 series — the 9-series version in this plan's first draft leaked the six training series); silence-only set from ESC-50 fold 5; KS acceptance (distribution-matched sets only); materialise + `BENCHMARK.lock`. Kick off the 50-clip hand-labelling (human task, parallel from here). **Phase 1 exit: score v1 `last.pt` on every new set and pin those probabilities too** — ship gates 1, 2 and 6 are undefined without them. | KS p > 0.10 per matched set; pooled paired ΔAUROC MDE ≤ 0.010 *measured from pinned v1 probabilities on the new composite*; v1 baselines pinned; lock verified. | 1 |
+| **WP3** | **Gates + preflight.** All gates in GATES.md as `tests/gates/test_g*.py`; `scripts/preflight.py` (≤90 s subset); `train.sh` refuses on red. Behavioral gates run against the `v1.0` worktree once; artifact gates run against `runs/v1/` bytes forever. Every measured failing value recorded in `GATE_BASELINE.md` — **a gate with no baseline row cannot be marked green.** | Every gate demonstrably fails against v1 with the predicted value (G10 via the reconstructed v1 aug-template membership file). **G16 is the one exception and must still fail against something**: its baseline is this roadmap's own first-draft augmentation policy, replayed from git history — a gate whose only recorded failure is a plan is still a gate that has never failed against code. | 0 |
+| **WP4** | **Benchmark.** TEN-matched LibriSpeech concat over the named 48-speaker reservation (priced: 6.53 h, 33% of LibriSpeech speakers); **all 3,768** FLEURS files re-cut to TEN statistics — the 327 near-empty ones quarantined first, the rest a pool the benchmark samples from rather than the 200 the first draft fixed on; silence-only set from ESC-50 fold 5 **after** the WP1.5 filter; KS acceptance; materialise + `BENCHMARK.lock`. **The AMI conversational evaluation becomes leave-one-series-out over all 9 series** — with 9 clusters total, a single 3-series holdout spends two-thirds of the only conversational data on training and measures on three points; LOSO makes every series a test cluster exactly once at no acquisition cost, and the series rotation must be stratified across the IS-vs-rest noise-floor divide (DATA-QC §F3). Kick off the hand-labelling — under the no-download constraint this is the only lever that raises evaluation quality, so prefer 30–60 min sampled where teacher and model disagree over uniform coverage. **Phase 1 exit: score v1 `last.pt` on every new set and every LOSO fold, and pin those probabilities too** — ship gates 1, 2, 4 and 6 are undefined without them. | KS p > 0.10 per matched set; pooled paired ΔAUROC MDE ≤ 0.010 *measured from pinned v1 probabilities on the new composite*; realised per-fold σ measured and reported for LOSO; v1 baselines pinned on every set and fold; lock verified. | 1 |
 | **WP5** | **Labels.** `teacher.py` (pinned version, weights hash folded into `manifest_set_id`), `hybrid.py`, split logic. | Teacher-vs-TEN F1 ≥ 0.93; AMI FAR ≤ 0.03; deletion-run p99 < 2 s; one AMI series teacher-free. | 2 |
-| **WP6** | **Manifests v2.** Series-level AMI splits, speaker splits honouring the benchmark reservation, three disjoint aug templates (fold-5 holdout real at last), retargeted gaps ([0.15, 1.2] s, 5% long-pause into [1.5, 4.0] s), duration-driven assembly, calibration slice by occupancy band, `noise_only` hard negatives, RIR pool restriction + direct-path trim, tags + **noise/RIR membership on every record** (without which the leakage gate is unenforceable — verified against v1's manifests, which record neither). | Leakage gate green on v2 manifests, red on v1's; pooled train transitions/min ≥ 45 (pooled convention — see DESIGN-NOTES for the macro/pooled distinction); occupancy ∈ [0.66, 0.72]; calibration slice KS p > 0.10; zero-lag test (cross-correlation peak within ±1 frame) for 100% of pool RIRs; clean-speech fraction matches the configured gate ± 2 pts. | 2/3 |
+| **WP6** | **Manifests v2.** Series-level AMI splits **stratified across the IS-vs-rest noise-floor divide** and honouring the LOSO rotation, speaker splits honouring the benchmark reservation, three disjoint aug templates (fold-5 holdout real at last), retargeted gaps ([0.15, 1.2] s, 5% long-pause into [1.5, 4.0] s) **carrying a room-tone floor — never mathematical zero (G17)**, duration-driven assembly, calibration slice by occupancy band, `noise_only` hard negatives drawn from the WP1.5-filtered pool, the fitted augmentation policy from WP1.5, tags + **noise/RIR membership on every record** (without which the leakage gate is unenforceable — verified against v1's manifests, which record neither), and AMI windows overlapping a mapped dropout excluded. | Leakage gate green on v2 manifests, red on v1's; pooled train transitions/min ≥ 45 (pooled convention — see DESIGN-NOTES for the macro/pooled distinction); occupancy ∈ [0.66, 0.72]; calibration slice KS p > 0.10; zero-lag test (cross-correlation peak within ±1 frame) for 100% of pool RIRs; clean-speech fraction matches the configured gate ± 2 pts; G16 and G17 still green on manifests built by the real builder. | 2/3 |
 | **WP7** | **Dataset + sampler.** `(epoch, index)`-keyed dataset, fixed 8 s crops from the per-item RNG, warm-up mask with **k derived from the measured cold-start transient** (rule: smallest k with median |Δp| < 0.02; re-measure on the trained v2 model), augmentation fingerprint in every item. | Supervision gate green under its corrected definition (every example ≥ 1 supervised frame; supervised cells ≥ 0.95; 4-epoch cumulative frame coverage ≥ 0.95); epoch-propagation gate green under persistent spawn workers; dataset replay of v1's manifests reproduces v1's label statistics (seam proof S7). | 4 |
 | **WP8** | **Models + export — before any training.** Log-compressed frontend pair (`rfft` for training/streaming, conv-DFT for export; both epsilons frozen), valid-conv encoder + BatchNorm (param-matched to v1 ± 2%), CRNN + TCN with unfold-rewritten depthwise, chunked encode, `set_num_threads(1)`, ONNX export (sigmoid in graph, single file). | Dead-parameter gate green on random init; streaming ≡ `sigmoid(forward_full)` ≤ 1e-6; ONNX parity ≤ 1e-3 + metric match to 4 dp via the harness; frontend cross-parity ≤ 1e-3 log-mag / ≤ 1e-3 prob / ≤ 1e-4 AUROC; CPU streaming p95 ≤ 10 ms both archs (weight-independent, so testable now). | 5 |
 | **WP9** | **Engine.** `bce_with_logits` loss (weight-mass denominator, warm-up mask, `isfinite` guard), schedule with `lr_lambda(0) > 0`, trainer (EMA, AUROC selection, ship-`last`, `--resume`, per-epoch weight-only history, `metrics.jsonl`, `run.json`), cross-backend startup guard, memory-budget test carried forward from v1 (the sampler/dataset path it guards is exactly what changed). | Loss unit-matches closed form including the confidently-wrong extreme (B6's counterexample as a test); lr(0) > 0; determinism gate green; overfit-8 near-zero; quarter-length dry run writes all bookkeeping and resumes mid-run. | 0/4 |
@@ -134,14 +172,16 @@ WP10 of 12.
 ### Dependency structure
 
 ```
-WP0 ── WP0.5 ── WP1 ──┬── WP2 ── WP3 ── WP4 ─────────┐
-                      ├── WP5 ── WP6 ──┬── WP7 ──────┤
-                      └── WP9 ─────────┴── WP8 ──────┴── WP10 ── WP11 ── WP12
+WP0 ── WP0.5 ── WP1 ──┬── WP2 ── WP3 ─────── WP4 ────┐
+                      ├── WP1.5 ──┬── WP5 ── WP6 ─┬── WP7 ──┤
+                      └── WP9 ────┘               └── WP8 ──┴── WP10 ── WP11 ── WP12
 ```
 
-WP2/WP3 (measurement track) and WP5 (labels) run concurrently after the cutover. **WP4 gates
-WP10 absolutely** — `train.sh` mechanically refuses to launch while preflight is red or
-`BENCHMARK.lock` is absent, so the dependency is enforced by tooling, not discipline.
+WP2/WP3 (measurement track), WP1.5 (assets) and WP5 (labels) run concurrently after the
+cutover. **WP1.5 gates WP4 and WP6** — the benchmark's silence-only set and every training
+manifest draw from pools that WP1.5 filters, so building either first means rebuilding it.
+**WP4 gates WP10 absolutely** — `train.sh` mechanically refuses to launch while preflight is red
+or `BENCHMARK.lock` is absent, so the dependency is enforced by tooling, not discipline.
 
 ---
 
@@ -161,7 +201,14 @@ WP10 absolutely** — `train.sh` mechanically refuses to launch while preflight 
 | R8 | selection metric, EMA, operating point | — | post-hoc, zero training runs |
 
 Bundled without ablation (no accuracy hypothesis): all correctness work; all bit-identical
-implementation/latency work.
+implementation/latency work; all WP1.5 asset filtering (verified by G15–G17, not by spending
+runs proving that speech-free noise beats speech-contaminated noise).
+
+**LOSO applies to the conclusion, not the search.** Rungs are screened on the single split at
+3 seeds — 9 folds per rung would multiply the ladder's cost for resolution the screens do not
+need. Only the final configuration, and v1's pinned baseline, are run across all 9 folds, and
+only ship criterion 4 is adjudicated that way. The fold count is committed to
+`ablation-preregistration.md` with everything else, before the first fold runs.
 
 ---
 
@@ -175,8 +222,10 @@ Against pinned v1 `last.pt`, scored on the same sets:
 2. Paired Δ turn-cost-per-turn: 95% CI upper bound **< 0**.
 3. TEN-30 paired ΔAUROC: CI lower bound **> −0.015** (non-inferiority at the instrument's
    measured resolution; the first draft's −0.005 secretly demanded a +0.014 win).
-4. **Conversational slice frame F1 exceeds its always-speech floor with CI lower bound > 0.**
-   v1 fails this. It is the single criterion that says whether v2 solved the actual problem.
+4. **Conversational slice frame F1 exceeds its always-speech floor with CI lower bound > 0**,
+   evaluated **leave-one-series-out across all 9 AMI series** and pooled across folds, with the
+   per-fold spread reported. v1 fails this. It is the single criterion that says whether v2
+   solved the actual problem, and LOSO is what makes 9 clusters enough to ask it.
 5. CPU streaming p95 within budget for every shipped architecture.
 6. False alarms per hour on the silence-only set: paired against v1 `last.pt` on the same set
    (pinned at WP4 exit), 95% CI of the difference entirely below zero — not a bare point
@@ -212,4 +261,9 @@ green check attests to almost nothing. v2:
   artifact of its file lengths, not a property of conversation.
 - **Reading frame F1 as progress.** Retired as an objective; it hid every failure that mattered.
 - **Assuming ~19 h of real conversational speech is enough.** Still the binding constraint;
-  nothing in this roadmap fixes it.
+  nothing in this roadmap fixes it, and under the no-download premise nothing can.
+- **Trusting a config over what the sampler emits.** The augmentation policy was wrong in this
+  plan's own first draft and would have shipped as written; G16 measures the realised
+  distribution precisely because the YAML cannot be believed.
+- **Filtering the test set the way the pools are filtered.** TEN contains clipped files. Clipping
+  is in-domain. Quarantine rules apply to the noise and reverb pools, never to evaluation audio.

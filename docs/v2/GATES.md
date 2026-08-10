@@ -5,11 +5,17 @@ begins. They turn green only as the fresh build lands. A gate that has never fai
 shown to work.
 
 Mechanics: gates live in `tests/gates/test_g*.py`. Behavioral gates (G1, G2, G3, G5, G8, G9,
-G11, G12) are run once against a `v1.0` worktree via a thin driver; artifact gates (G4, G6, G7,
-G10, G13) run against `runs/v1/` bytes forever as regression fixtures. `scripts/preflight.py`
+G11, G12, G16, G17) are run once against a `v1.0` worktree via a thin driver; artifact gates
+(G4, G6, G7, G10, G13, G15) run against `runs/v1/` bytes forever as regression fixtures. `scripts/preflight.py`
 runs the ≤90 s subset; `train.sh` exits non-zero on any red. Every measured failing value is
 recorded in `GATE_BASELINE.md` next to its passing value when it turns green — **a gate with no
 baseline row cannot be marked green.**
+
+**Added 2026-08-10 after the data audit:** G15 (asset provenance), G16 (train/test acoustic
+match) and G17 (no unphysical silence) come from [`DATA-QC.md`](./DATA-QC.md). G16 is unusual
+among the gates in that it does not encode a v1 defect — it encodes a **v2 defect**, caught in
+the plan before any code was written, and it is the only gate whose failing baseline is the
+roadmap's own first draft.
 
 Two corrections to this file's first draft, found before execution: G1's "bit-identical to CPU"
 demanded the impossible (cross-backend bit-identity does not exist — v1's own safe-size
@@ -37,6 +43,9 @@ is demonstrated via a reconstructed aug-template membership file.
 | **G12** | Schedule | `lr(step 0) > 0`; warmup is `(step+1)/warmup_steps`; the recorded LR trace contains no zero entries. | v1's first optimizer step ran at lr = 0.0 exactly. |
 | **G13** | Export parity | ONNX streaming ≡ PyTorch streaming ≤ 1e-3 over ≥ 5 real files; eval metrics via the ONNX source match the PyTorch source to 4 decimals; frontend cross-parity (rfft vs conv-DFT): ≤ 1e-3 log-magnitude, ≤ 1e-3 probability, ≤ 1e-4 end-to-end AUROC on the 32-example startup set. Runs on random init. | Not a v1 failure (v1's export parity was 4.2e-4 — sound); the gate exists because the v2 frontend split makes parity *more* fragile, and the linear-domain 1.9e-4 becomes ~0.016 after the log. |
 | **G14** | Memory budget | 300 real batches at configured dataloader settings: peak process-tree RSS under the v1 ceiling (~7.6 GB), soft runaway guard on the median. Carried from v1 — the sampler/dataset/crop path it guards is exactly what the fresh build replaces. | Not a v1 failure; a regression tripwire. |
+| **G15** | Asset provenance | Every path referenced by any manifest appears in `asset_qc.json` with `status: ok`; no quarantined asset is reachable from any split; the QC report's own hash is recorded in `manifest_set_id`. Noise-pool records carry the measured `speech_frac` and `active_region`; RIR records carry measured RT60, DRR and direct delay. | v1 has no asset QC of any kind: 137 speech-bearing ESC-50 clips, 48 hard-clipped clips and 83 unusable RIRs were reachable from the train manifest (DATA-QC §F4, §F5, §F6). |
+| **G16** | Train/test acoustic match | On ≥ 500 realised training examples (built by the actual dataset code, not the config): two-sample KS against TEN-30 on (a) speech/non-speech contrast in dB and (b) median non-speech level, **both p > 0.10**. Measured on what the sampler emits, so a policy that drifts from its YAML still fails. | v1 policy passes contrast (D=0.129, p=0.68) and marginally the level test (D=0.235, p=0.074). **The v2 policy as first specified fails both** (p=0.005 / p=1.1e-08) — the gate exists because the plan's own augmentation numbers were the thing that broke it. |
+| **G17** | No unphysical silence | Zero emitted training examples contain an all-zero 512-sample frame; the gap generator always produces a floor; every AMI window overlapping a digital-dropout region is excluded by the manifest builder. | v1: gap audio coin-flips to exact zeros; 1.64% of AMI non-speech frames are exact zero, including a 149.9 s continuous dropout in ES2002d (DATA-QC §F2). |
 
 ---
 

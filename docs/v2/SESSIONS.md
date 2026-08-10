@@ -56,3 +56,40 @@ criteria, and the enumerated five pinned corrections for Phase 0.
 
 Committed: rewritten ROADMAP.md and GATES.md, new DESIGN-NOTES.md / BETS.md / measurements/.
 Next: WP0 (pin v1 at the tag), then the WP0.5 spikes.
+
+## 2026-08-10 — Data audit and the asset stage
+
+Question asked: is anything done to ensure the audio is clean and usable? Answer, on inspection:
+format conditioning yes, quality control no — and no gate anywhere looked at the audio.
+
+Ran a waveform-level audit of all 16,957 files (43.5 h) plus 214 impulse responses:
+`qc_scan.py` (level, pathology, dynamics, bandwidth, hum, hashes), `qc_rir.py` (direct path,
+DRR, Schroeder decay, tail contamination), `qc_label_energy.py` (labels vs energy),
+`qc_esc50_speech.py` (silero-vad 6.2.1 over the noise corpus), `qc_contrast.py` (does an
+augmented training example look like a test file).
+
+Integrity came back clean — no decode errors, no non-finite samples, no duplicates, uniform
+16 kHz mono. Every finding is content-level, and five falsified committed plan claims. The
+sharpest: the v2 augmentation policy is an acoustic regression against v1's, missing toward
+easier-than-reality. v1 matches TEN on speech/non-speech contrast at KS p=0.68; the v2 draft
+manages p=0.005. Cause was `noise_prob 0.85` emitting digital-silence gaps, an SNR mixture 10 dB
+above v1's centre, and a gain range with a −6 dB mean.
+
+Also found: 296 of 2,000 ESC-50 clips carry speech (the hand-picked confuser categories find 35
+of the worst 79); zero padding breaks `mix_at_snr` by 3–13.5 dB on 18.7% of clips; a 149.9 s
+digital dropout in ES2002d; the AMI series split spans two acoustic regimes; and label noise is
+visible from energy alone (13.3% LibriSpeech, 22.4% AMI speech-labelled frames silent), which
+gives the teacher an independent cross-check.
+
+Plan updated: new **WP1.5 (Assets)** between the cutover and the benchmark/manifest work, gating
+both; gates **G15/G16/G17** added; ship gate 4 moved to leave-one-series-out; FLEURS opened from
+200 files to the full usable pool; DESIGN-NOTES §7 banner-marked as partially falsified and §11
+added with the inventory and the acoustic fit targets; BETS B9/B10 opened. Committed
+`docs/v2/DATA-QC.md` with the findings and the P0–P7 preparation spec.
+
+Confirmed with the filesystem that no further data exists locally and none will be downloaded —
+recorded in DECISIONS as a standing premise, since it fixes the version's data ceiling.
+
+Next: WP0 (pin v1 at the tag) remains the entry point; WP1.5 is now the first data work after
+the cutover, and its cheapest items (the `mix_at_snr` active-region fix, the pool filters, the
+policy fit) are already computable from the committed QC output.
